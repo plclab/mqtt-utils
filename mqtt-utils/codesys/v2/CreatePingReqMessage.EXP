@@ -1,0 +1,27 @@
+
+(* @NESTEDCOMMENTS := 'No' *)
+(* @PATH := '\/MQTT-Utils' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION CreatePingReqMessage : UINT
+VAR_INPUT
+	pMessage		: POINTER TO BYTE;
+END_VAR
+VAR
+	pDst			: POINTER TO BYTE;
+	pSrc			: POINTER TO BYTE;
+	clientIdLength	: BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+(* Fixed header, byte 1, Control Packet type *)
+pMessage^ := MQTT_MESSAGE_TYPE_PINGREQ;
+
+(* Fixed header, byte 2, Remaining Length *)
+pMessage := pMessage + 1;
+pMessage^ := 0;
+
+(* Return the total message length *)
+CreatePingReqMessage := 2;
+
+END_FUNCTION

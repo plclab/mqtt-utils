@@ -1,0 +1,19 @@
+
+(* @NESTEDCOMMENTS := 'No' *)
+(* @PATH := '\/MQTT-Utils' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION GetStringLength : UINT
+VAR_INPUT
+	pString			: POINTER TO BYTE;
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+GetStringLength := 0;
+WHILE pString^ <> 0 DO
+	pString := pString + 1;
+	GetStringLength := GetStringLength + 1;
+END_WHILE
+
+END_FUNCTION

@@ -1,0 +1,113 @@
+
+(* @NESTEDCOMMENTS := 'No' *)
+(* @PATH := '\/MQTT-Utils' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION CreatePublishMessage : UINT
+VAR_INPUT
+	pTopic				: POINTER TO BYTE;
+	TopicLength			: UINT;
+	pPayload			: POINTER TO BYTE;
+	PayloadLength		: UINT;
+	QoS					: MqttQoS;
+	RetainFlag			: BOOL;
+	DupFlag				: BOOL;
+	PacketIdentifier	: UINT;
+	pMessage			: POINTER TO BYTE;
+END_VAR
+VAR
+	remainingLength		: UINT;
+	pDst				: POINTER TO BYTE;
+	pSrc				: POINTER TO BYTE;
+	count				: UINT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+(* Fixed header, byte 1, Control Packet type *)
+pDst := pMessage;
+pDst^ := MQTT_MESSAGE_TYPE_PUBLISH;
+pDst^.0 := RetainFlag;
+IF QoS = MQTT_QOS_AT_LEAST_ONCE THEN
+	pDst^.1 := TRUE;
+ELSIF QoS = MQTT_QOS_EXACTLY_ONCE THEN
+	pDst^.2 := TRUE;
+END_IF
+pDst^.3 := DupFlag;
+
+(* Fixed header, byte 2 - ..., Remaining Length *)
+remainingLength := (2 + TopicLength) + PayloadLength;
+IF QoS <> MQTT_QOS_AT_MOST_ONCE THEN
+	remainingLength := remainingLength + 2;
+END_IF
+
+IF remainingLength <= 127 THEN
+
+	pDst := pDst + 1;
+	pDst^ := UINT_TO_BYTE(remainingLength);
+
+	CreatePublishMessage := remainingLength + 2;
+
+ELSE
+
+	CreatePublishMessage := remainingLength + 1;
+
+	count := 0;
+	WHILE remainingLength > 0 AND count < 4 DO
+
+		CreatePublishMessage := CreatePublishMessage + 1;
+
+		pDst := pDst + 1;
+		pDst^ := UINT_TO_BYTE(remainingLength MOD 128);
+
+		(* Set the most significant bit if more length bytes will follow *)
+		remainingLength := remainingLength / 128;
+		IF remainingLength > 0 THEN
+			pDst^ := pDst^ OR 128;
+		END_IF
+
+	END_WHILE
+
+END_IF
+
+(* Variable header, byte 1 - 2, Topic, Length *)
+pDst := pDst + 1;
+pDst^ := WORD_TO_BYTE(SHR(UINT_TO_WORD(TopicLength), 8) AND 16#FF); (* MSB *)
+pDst := pDst + 1;
+pDst^ := WORD_TO_BYTE(UINT_TO_WORD(TopicLength) AND 16#FF); (* LSB *)
+
+(* Variable header, byte 3 - ..., Topic, UTF-8 String bytes *)
+pDst := pDst + 1;
+pSrc := pTopic;
+count := 0;
+WHILE count < TopicLength DO
+
+	pDst^ := pSrc^;
+
+	pDst := pDst + 1;
+	pSrc := pSrc + 1;
+	count := count + 1;
+
+END_WHILE
+
+(* Variable header, byte n - n-1, Packet Identifier *)
+IF QoS <> MQTT_QOS_AT_MOST_ONCE THEN
+	pDst^ := WORD_TO_BYTE(SHR(UINT_TO_WORD(PacketIdentifier), 8) AND 16#FF); (* MSB *)
+	pDst := pDst + 1;
+	pDst^ := WORD_TO_BYTE(UINT_TO_WORD(PacketIdentifier) AND 16#FF); (* LSB *)
+	pDst := pDst + 1;
+END_IF
+
+(* Payload, byte 1 - ..., bytes *)
+pSrc := pPayload;
+count := 0;
+WHILE count < PayloadLength DO
+
+	pDst^ := pSrc^;
+
+	pDst := pDst + 1;
+	pSrc := pSrc + 1;
+	count := count + 1;
+
+END_WHILE
+
+END_FUNCTION

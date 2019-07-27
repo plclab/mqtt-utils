@@ -1,0 +1,11 @@
+(* @NESTEDCOMMENTS := 'No' *)
+(* @PATH := '\/MQTT-Utils' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE MqttQoS :
+(
+	MQTT_QOS_AT_MOST_ONCE := 0,
+	MQTT_QOS_AT_LEAST_ONCE := 1,
+	MQTT_QOS_EXACTLY_ONCE := 2
+);
+END_TYPE
+(* @END_DECLARATION := '0' *)

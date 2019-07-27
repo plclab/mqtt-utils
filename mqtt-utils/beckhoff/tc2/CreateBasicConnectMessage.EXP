@@ -1,0 +1,88 @@
+
+(* @NESTEDCOMMENTS := 'No' *)
+(* @PATH := '\/MQTT-Utils' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION CreateBasicConnectMessage : UINT
+VAR_INPUT
+	ClientId		: STRING(MQTT_MAX_CLIENT_ID_LENGTH);
+	KeepAlive		: UINT;
+	pMessage		: POINTER TO BYTE;
+END_VAR
+VAR
+	pDst			: POINTER TO BYTE;
+	pSrc			: POINTER TO BYTE;
+	clientIdLength	: BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+(* Fixed header, byte 1, Control Packet type *)
+pDst := pMessage;
+pDst^ := MQTT_MESSAGE_TYPE_CONNECT;
+
+(* Fixed header, byte 2, Remaining Length *)
+(* Remaining length is calculated during construction of message and written last (max remaining length of basic connect message is 127 bytes) *)
+
+(* Variable header, byte 1 - 2, Protocol Name, Length *)
+pDst := pDst + 2;
+pDst^ := 0; (* MSB *)
+pDst := pDst + 1;
+pDst^ := 4; (* LSB *)
+
+(* Variable header, byte 3 - 6, Protocol Name, 'MQTT' as UTF-8 String bytes *)
+pDst := pDst + 1;
+pDst^ := MQTT_M;
+pDst := pDst + 1;
+pDst^ := MQTT_Q;
+pDst := pDst + 1;
+pDst^ := MQTT_T;
+pDst := pDst + 1;
+pDst^ := MQTT_T;
+
+(* Variable header, byte 7, Protocol Level *)
+pDst := pDst + 1;
+pDst^ := MQTT_PROTOCOL_LEVEL_3_1_1;
+
+(* Variable header, byte 8, Connect Flags *)
+pDst := pDst + 1;
+pDst^ := MQTT_BASIC_CONNECT_FLAGS;
+
+(* Variable header, byte 9 - 10, Keep Alive *)
+pDst := pDst + 1;
+pDst^ := WORD_TO_BYTE(SHR(UINT_TO_WORD(KeepAlive), 8) AND 16#FF); (* MSB *)
+pDst := pDst + 1;
+pDst^ := WORD_TO_BYTE(UINT_TO_WORD(KeepAlive) AND 16#FF); (* LSB *)
+
+(* Payload, byte 1 - 2, Client Identifier, Length *)
+(* Length is determined while copying the ClientId char's *)
+
+(* Payload, byte 3 - ..., Client Identifier, UTF-8 String bytes *)
+pDst := pDst + 3;
+pSrc := ADR(ClientId);
+clientIdLength := 0;
+WHILE pSrc^ <> 0 AND clientIdLength < MQTT_MAX_CLIENT_ID_LENGTH DO
+
+	pDst^ := pSrc^;
+
+	pDst := pDst + 1;
+	pSrc := pSrc + 1;
+	clientIdLength := clientIdLength + 1;
+
+END_WHILE
+
+(* CALCULATED VALUES *)
+
+(* Payload, byte 1 - 2, Client Identifier, Length *)
+pDst := pMessage + INT_TO_DINT(2 + 10);
+pDst^ := 0; (* MSB *)
+pDst := pDst + 1;
+pDst^ := clientIdLength; (* LSB *)
+
+(* Fixed header, byte 2, Remaining Length *)
+pDst := pMessage + 1;
+pDst^ := 10 + (2 + clientIdLength);
+
+(* Return the total message length *)
+CreateBasicConnectMessage := pDst^ + 2;
+
+END_FUNCTION

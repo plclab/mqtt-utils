@@ -1,0 +1,20 @@
+
+(* @NESTEDCOMMENTS := 'No' *)
+(* @PATH := '\/MQTT-Utils' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION GetStringLengthMax : UINT
+VAR_INPUT
+	pString			: POINTER TO BYTE;
+	MaxLength		: UINT;
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+GetStringLengthMax := 0;
+WHILE pString^ <> 0 AND GetStringLengthMax < MaxLength DO
+	pString := pString + 1;
+	GetStringLengthMax := GetStringLengthMax + 1;
+END_WHILE
+
+END_FUNCTION

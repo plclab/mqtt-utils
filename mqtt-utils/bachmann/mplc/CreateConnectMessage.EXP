@@ -1,0 +1,233 @@
+
+(* @NESTEDCOMMENTS := 'No' *)
+(* @PATH := '\/MQTT-Utils' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION CreateConnectMessage : INT
+VAR_INPUT
+	CleanSessionFlag		: BOOL;
+	WillFlag				: BOOL;
+	WillQoS					: MqttQoS;
+	WillRetainFlag			: BOOL;
+	UserNameFlag			: BOOL;
+	PasswordFlag			: BOOL;
+	KeepAlive				: UINT;
+	pClientId				: POINTER TO BYTE;
+	ClientIdLength			: UINT;
+	pWillTopic				: POINTER TO BYTE;
+	WillTopicLength			: UINT;
+	pWillPayload			: POINTER TO BYTE;
+	WillPayloadLength		: UINT;
+	pUserName				: POINTER TO BYTE;
+	UserNameLength			: UINT;
+	pPassword				: POINTER TO BYTE;
+	PasswordLength			: UINT;
+	pMessage				: POINTER TO BYTE;
+END_VAR
+VAR
+	remainingLength			: UINT;
+	pDst					: POINTER TO BYTE;
+	pSrc					: POINTER TO BYTE;
+	count					: UINT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+
+(* Fixed header, byte 1, Control Packet type *)
+pDst := pMessage;
+pDst^ := MQTT_MESSAGE_TYPE_CONNECT;
+
+(* Fixed header, byte 2 - ..., Remaining Length *)
+remainingLength := 10 + (2 + ClientIdLength);
+IF WillFlag THEN
+	remainingLength := remainingLength + (2 + WillTopicLength) + (2 + WillPayloadLength);
+END_IF
+IF UserNameFlag THEN
+
+	remainingLength := remainingLength + (2 + UserNameLength);
+
+	IF PasswordFlag THEN
+		remainingLength := remainingLength + (2 + PasswordLength);
+	END_IF
+
+END_IF
+
+IF remainingLength <= 127 THEN
+
+	pDst := pDst + 1;
+	pDst^ := UINT_TO_BYTE(remainingLength);
+
+	CreateConnectMessage := remainingLength + 2;
+
+ELSE
+
+	CreateConnectMessage := remainingLength + 1;
+
+	count := 0;
+	WHILE remainingLength > 0 AND count < 4 DO
+
+		CreateConnectMessage := CreateConnectMessage + 1;
+
+		pDst := pDst + 1;
+		pDst^ := UINT_TO_BYTE(remainingLength MOD 128);
+
+		(* Set the most significant bit if more length bytes will follow *)
+		remainingLength := remainingLength / 128;
+		IF remainingLength > 0 THEN
+			pDst^ := pDst^ OR 128;
+		END_IF
+
+	END_WHILE
+
+END_IF
+
+(* Variable header, byte 1 - 2, Protocol Name, Length *)
+pDst := pDst + 1;
+pDst^ := 0; (* MSB *)
+pDst := pDst + 1;
+pDst^ := 4; (* LSB *)
+
+(* Variable header, byte 3 - 6, Protocol Name, 'MQTT' as UTF-8 String bytes *)
+pDst := pDst + 1;
+pDst^ := MQTT_M;
+pDst := pDst + 1;
+pDst^ := MQTT_Q;
+pDst := pDst + 1;
+pDst^ := MQTT_T;
+pDst := pDst + 1;
+pDst^ := MQTT_T;
+
+(* Variable header, byte 7, Protocol Level *)
+pDst := pDst + 1;
+pDst^ := MQTT_PROTOCOL_LEVEL_3_1_1;
+
+(* Variable header, byte 8, Connect Flags *)
+pDst := pDst + 1;
+pDst^ := 0;
+
+pDst^.0 := FALSE; (* Reserved *)
+pDst^.1 := CleanSessionFlag;
+pDst^.2 := WillFlag;
+IF WillQoS = MQTT_QOS_AT_LEAST_ONCE THEN
+	pDst^.3 := TRUE;
+ELSIF WillQoS = MQTT_QOS_EXACTLY_ONCE THEN
+	pDst^.4 := TRUE;
+END_IF
+pDst^.5 := WillRetainFlag;
+pDst^.6 := PasswordFlag;
+pDst^.7 := UserNameFlag;
+
+(* Variable header, byte 9 - 10, Keep Alive *)
+pDst := pDst + 1;
+pDst^ := WORD_TO_BYTE(SHR(UINT_TO_WORD(KeepAlive), 8) AND 16#FF); (* MSB *)
+pDst := pDst + 1;
+pDst^ := WORD_TO_BYTE(UINT_TO_WORD(KeepAlive) AND 16#FF); (* LSB *)
+
+(* Payload, byte 1 - 2, Client Identifier, Length *)
+pDst := pDst + 1;
+pDst^ := WORD_TO_BYTE(SHR(UINT_TO_WORD(ClientIdLength), 8) AND 16#FF); (* MSB *)
+pDst := pDst + 1;
+pDst^ := WORD_TO_BYTE(UINT_TO_WORD(ClientIdLength) AND 16#FF); (* LSB *)
+
+(* Payload, byte 3 - ..., Client Identifier, UTF-8 String bytes *)
+pDst := pDst + 1;
+pSrc := pClientId;
+count := 0;
+WHILE pSrc^ <> 0 AND count < ClientIdLength DO
+
+	pDst^ := pSrc^;
+
+	pDst := pDst + 1;
+	pSrc := pSrc + 1;
+	count := count + 1;
+
+END_WHILE
+
+IF WillFlag THEN
+
+	(* Payload, byte n - n+1, Will Topic, Length *)
+	pDst^ := WORD_TO_BYTE(SHR(UINT_TO_WORD(WillTopicLength), 8) AND 16#FF); (* MSB *)
+	pDst := pDst + 1;
+	pDst^ := WORD_TO_BYTE(UINT_TO_WORD(WillTopicLength) AND 16#FF); (* LSB *)
+
+	(* Payload, byte n - ..., Will Topic, UTF-8 String bytes *)
+	pDst := pDst + 1;
+	pSrc := ADR(pWillTopic);
+	count := 0;
+	WHILE pSrc^ <> 0 AND count < WillTopicLength DO
+
+		pDst^ := pSrc^;
+
+		pDst := pDst + 1;
+		pSrc := pSrc + 1;
+		count := count + 1;
+
+	END_WHILE
+
+	(* Payload, byte n - n+1, Will Payload, Length *)
+	pDst^ := WORD_TO_BYTE(SHR(UINT_TO_WORD(WillPayloadLength), 8) AND 16#FF); (* MSB *)
+	pDst := pDst + 1;
+	pDst^ := WORD_TO_BYTE(UINT_TO_WORD(WillPayloadLength) AND 16#FF); (* LSB *)
+
+	(* Payload, byte n - ..., Will Topic, Bytes *)
+	pDst := pDst + 1;
+	pSrc := ADR(pWillPayload);
+	count := 0;
+	WHILE pSrc^ <> 0 AND count < WillPayloadLength DO
+
+		pDst^ := pSrc^;
+
+		pDst := pDst + 1;
+		pSrc := pSrc + 1;
+		count := count + 1;
+
+	END_WHILE
+
+END_IF
+
+IF UserNameFlag THEN
+
+	(* Payload, byte n - n+1, User Name, Length *)
+	pDst^ := WORD_TO_BYTE(SHR(UINT_TO_WORD(UserNameLength), 8) AND 16#FF); (* MSB *)
+	pDst := pDst + 1;
+	pDst^ := WORD_TO_BYTE(UINT_TO_WORD(UserNameLength) AND 16#FF); (* LSB *)
+
+	(* Payload, byte n - ..., User Name, UTF-8 String bytes *)
+	pDst := pDst + 1;
+	pSrc := ADR(pUserName);
+	count := 0;
+	WHILE pSrc^ <> 0 AND count < UserNameLength DO
+
+		pDst^ := pSrc^;
+
+		pDst := pDst + 1;
+		pSrc := pSrc + 1;
+		count := count + 1;
+
+	END_WHILE
+
+	IF PasswordFlag THEN
+
+		(* Payload, byte n - n+1, Password, Length *)
+		pDst^ := WORD_TO_BYTE(SHR(UINT_TO_WORD(PasswordLength), 8) AND 16#FF); (* MSB *)
+		pDst := pDst + 1;
+		pDst^ := WORD_TO_BYTE(UINT_TO_WORD(PasswordLength) AND 16#FF); (* LSB *)
+
+		(* Payload, byte n - ..., Password, UTF-8 String bytes *)
+		pDst := pDst + 1;
+		pSrc := ADR(pPassword);
+		count := 0;
+		WHILE pSrc^ <> 0 AND count < PasswordLength DO
+
+			pDst^ := pSrc^;
+
+			pDst := pDst + 1;
+			pSrc := pSrc + 1;
+			count := count + 1;
+
+		END_WHILE
+
+	END_IF
+
+END_IF
+
+END_FUNCTION
